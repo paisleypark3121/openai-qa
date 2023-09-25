@@ -1,6 +1,7 @@
 # Ignora la cartella node_modules
 __pycache__
 chroma
+tutorial file
 
 # Ignora i file collegati alle chiavi API
 .env
