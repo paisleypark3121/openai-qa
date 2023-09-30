@@ -1,50 +1,68 @@
 import os
 from dotenv import load_dotenv
-from utilities import *
+from langchain.document_loaders import TextLoader
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
 
-def init():
-    print("INIT")
-    load_dotenv()
-    embedding = get_embedding()
-    return embedding
+# from utilities import *
+
+load_dotenv()
 
 # Configurazione iniziale
-file_source = "./files/PT691-Transcript.pdf"
-persist_directory = 'chroma/sds/'
+file_source = "./files/jokerbirot_space_musician.txt"
+persist_directory = './chroma/jokerbirot_space_musician'
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
-template = """I will provide you pieces of [Context] to answer the [Question]. \
-    If you don't know the answer based on [Context] just say that you don't know, don't try to make up an answer. \
+template = """Ti fornisco un breve [Context] che dovrai usare per rispondere alla [Question]. \
+    Se non conosci la risposta relativamente al [Context] devi dire che non sai rispondere, non provare ad inventare la risposta. \
     [Context]: {context} \
     [Question]: {question} \
-    Helpful Answer:"""
-overwrite_file_source = False
-overwrite_vectordb = False
-save_directory = '.'
-question = "Which is the difference between CPU and GPU?"
+    Risposta:"""
+model_name="gpt-3.5-turbo"
+temperature=0.7
 
-if __name__ == "__main__":
+embedding = OpenAIEmbeddings()
+loader = TextLoader(file_source)
+documents = loader.load()
+text_splitter = CharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+documents = text_splitter.split_documents(documents)
 
-    embedding = init()    
+vectordb = Chroma.from_documents(
+            documents=documents,
+            embedding=embedding,
+            persist_directory=persist_directory
+        )
 
-    # Controllo e gestione del file_source
-    file_source = get_file_source(file_source, save_directory, overwrite=overwrite_file_source)
+QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
+llm = ChatOpenAI(model_name=model_name, temperature=temperature)
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    # Generazione o recupero del vectordb
-    vectordb = get_vectordb(
-        persist_directory=persist_directory,
-        embedding=embedding,
-        file_source=file_source,
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        overwrite=overwrite_vectordb)
+qa_chain = ConversationalRetrievalChain.from_llm(
+    llm,
+    retriever=vectordb.as_retriever(), 
+    memory=memory)
 
-    # Chiedere una domanda e ottenere una risposta
-    result = get_result(
-        question=question,
-        template=template,
-        vectordb=vectordb
-    )
+try:
+    print("\n***WELCOME***\n")
+    while True:
+        question = input("\nTu: ")
+        result = qa_chain({"question": question})
+        print(f"Assistant: {result['answer']}")
+except KeyboardInterrupt:
+    print("ciao!!!")
 
-    # Stampare il risultato
-    print(result["result"])
+# question = "Chi è Jokerbirot?"
+# result = qa_chain({"question": question})
+# print(result["answer"])
+# question = "Mi puoi dare altre informazioni su di lui?"
+# result = qa_chain({"question": question})
+# print(result["answer"])
+# question = "Chi è Jackie Chen?"
+# result = qa_chain({"question": question})
+# print(result["answer"])
